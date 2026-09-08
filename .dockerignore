@@ -1,0 +1,10 @@
+.git
+.env
+.cache
+artifacts
+frontend/node_modules
+backend/vendor
+backend/.env
+backend/storage/logs/*
+backend/public/build
+backend/database/database.sqlite
