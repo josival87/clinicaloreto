@@ -1,10 +1,6 @@
 name: clinica-loreto
 x-app: &app
   image: clinica-loreto-app:local
-  build:
-    context: .
-    dockerfile: docker/Dockerfile
-    target: php-base
   env_file: .env
   environment:
     DB_CONNECTION: pgsql
@@ -34,12 +30,20 @@ services:
     restart: unless-stopped
   app:
     <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-base
+      args:
+        VITE_APP_BASE_PATH: ${APP_BASE_PATH:-}
   web:
     image: clinica-loreto-web:local
     build:
       context: .
       dockerfile: docker/Dockerfile
       target: web
+      args:
+        VITE_APP_BASE_PATH: ${APP_BASE_PATH:-}
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8090}:80"
     depends_on:

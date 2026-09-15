@@ -3,10 +3,11 @@ import {X,LoaderCircle,Search,ChevronLeft,ChevronRight,Inbox,AlertCircle} from '
 export type Row = Record<string, any>;
 export type Ctx = {user:Row; options:Row; notify:(s:string)=>void; refresh:()=>void; navigate:(s:string)=>void};
 let csrf='';
+export const APP_BASE_PATH=import.meta.env.BASE_URL.replace(/\/build\/$/,'');
 export function setCsrf(value:string){csrf=value}
 export async function api(path:string,method='GET',body?:unknown){
   const isForm=body instanceof FormData;
-  const r=await fetch('/api'+path,{method,credentials:'same-origin',headers:{Accept:'application/json',...(method!=='GET'?{'X-CSRF-TOKEN':csrf}:{}),...(!isForm&&body?{'Content-Type':'application/json'}:{})},body:body?(isForm?body:JSON.stringify(body)):undefined});
+  const r=await fetch(APP_BASE_PATH+'/api'+path,{method,credentials:'same-origin',headers:{Accept:'application/json',...(method!=='GET'?{'X-CSRF-TOKEN':csrf}:{}),...(!isForm&&body?{'Content-Type':'application/json'}:{})},body:body?(isForm?body:JSON.stringify(body)):undefined});
   const data=r.status===204?null:await r.json().catch(()=>({message:'O servidor não respondeu como esperado.'}));
   if(!r.ok){if(r.status===401)window.dispatchEvent(new Event('session-expired'));throw new Error(data.errors?Object.values(data.errors).flat().join(' '):data.message||'Não foi possível concluir. Tente novamente.');}
   if(data?.csrf)setCsrf(data.csrf); return data;

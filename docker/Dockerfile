@@ -4,6 +4,8 @@ RUN npm install -g pnpm@11.19.0
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
+ARG VITE_APP_BASE_PATH=
+ENV VITE_APP_BASE_PATH=${VITE_APP_BASE_PATH}
 RUN pnpm build
 
 FROM php:8.5-fpm-alpine AS php-base
