@@ -52,11 +52,11 @@ class GeocodingTest extends TestCase
         $this->putJson('/api/clients/'.$client->id,$this->clientData()+$this->address)->assertOk()->assertJsonPath('latitude',null)->assertJsonPath('longitude',null);
     }
 
-    public function test_edit_can_keep_same_coordinates_after_regenerating_for_changed_address(): void
+    public function test_edit_saves_coordinates_adjusted_on_the_map_after_address_change(): void
     {
         $client=Client::create($this->clientData()+['street'=>'Rua Antiga','latitude'=>-23.5,'longitude'=>-46.6]);
-        $this->putJson('/api/clients/'.$client->id,$this->clientData()+$this->address+['latitude'=>-23.5,'longitude'=>-46.6])
-            ->assertOk()->assertJsonPath('latitude',-23.5)->assertJsonPath('longitude',-46.6);
+        $this->putJson('/api/clients/'.$client->id,$this->clientData()+$this->address+['latitude'=>-23.562101,'longitude'=>-46.654721])
+            ->assertOk()->assertJsonPath('latitude',-23.562101)->assertJsonPath('longitude',-46.654721);
     }
 
     public function test_saved_client_geocoding_shares_preview_cache(): void

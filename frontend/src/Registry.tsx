@@ -1,22 +1,35 @@
-import {useState,useEffect,useRef,type FormEvent} from 'react';
+import {useState,useEffect,useRef,useCallback,type FormEvent} from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {Plus,Pencil,Trash2,ArrowRight,Camera,MapPin,Printer,Phone,UserRound,FileText} from 'lucide-react';
 import {type Ctx,type Row,api,useApi,query,Avatar,cpf,phone,dateBR,Status,Modal,Confirm,Field,ErrorBox,Loading,Empty,Pager,SearchBox} from './lib';
 export const clientFields=[['name','Nome completo','text',true],['cpf','CPF','text',true],['mother','Nome da mãe','text'],['rg','RG','text'],['birth_date','Data de nascimento','date',true],['phone','Telefone / WhatsApp','tel',true],['phone2','Telefone alternativo','tel'],['sus','Cartão SUS','text'],['street','Rua / avenida','text'],['number','Número','text'],['neighborhood','Bairro','text'],['city','Cidade','text'],['state','Estado (UF)','text'],['zip','CEP','text'],['marital_status','Estado civil','select'],['profession','Profissão','text'],['leader_id','Liderança','select'],['latitude','Latitude','number'],['longitude','Longitude','number']] as const;
 const addressFields=['street','number','neighborhood','city','state','zip'];
 const hasLocation=(row:Row)=>row.latitude!=null&&row.latitude!==''&&row.longitude!=null&&row.longitude!=='';
 const configs:Row={clients:{title:'Clientes',single:'cliente',desc:'Cada cadastro é o começo de um cuidado.',fields:clientFields},doctors:{title:'Médicos',single:'médico',desc:'Profissionais que fazem o cuidado acontecer.',fields:[['name','Nome completo','text',true],['cpf','CPF','text',true],['crm','CRM / UF','text',true],['phone','Telefone','tel',true]]},leaders:{title:'Lideranças',single:'liderança',desc:'A conexão entre a comunidade e a clínica.',fields:[['name','Nome completo','text',true],['phone','Telefone','tel',true],['neighborhood','Bairro','text',true]]},specialties:{title:'Especialidades médicas',single:'especialidade',desc:'Áreas de atendimento oferecidas pela clínica.',fields:[['name','Nome da especialidade','text',true]]},users:{title:'Administradores e usuários',single:'usuário',desc:'Controle quem pode acessar e gerenciar o sistema.',fields:[['name','Nome completo','text',true],['cpf','CPF','text',true],['password','Senha (mínimo 10 caracteres)','password'],['level','Nível de acesso','select']]}};
+const locationPin=L.divIcon({className:'location-pin-wrap',html:'<span class="location-pin" aria-hidden="true"></span>',iconSize:[26,26],iconAnchor:[13,13]});
+function LocationPicker({latitude,longitude,onChange}:{latitude:unknown;longitude:unknown;onChange:(latitude:number,longitude:number)=>void}){
+ const ref=useRef<HTMLDivElement>(null),mapRef=useRef<L.Map|null>(null),markerRef=useRef<L.Marker|null>(null);
+ const valid=Number.isFinite(Number(latitude))&&Number.isFinite(Number(longitude));
+ const position:[number,number]=[Number(latitude),Number(longitude)];
+ useEffect(()=>{if(!valid||!ref.current||mapRef.current)return;const map=L.map(ref.current,{zoomControl:true}).setView(position,18);mapRef.current=map;L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',maxZoom:19,referrerPolicy:'strict-origin'}).addTo(map);const marker=L.marker(position,{draggable:true,icon:locationPin,keyboard:true,title:'Ponto do endereço'}).addTo(map);markerRef.current=marker;const update=({lat,lng}:L.LatLng)=>onChange(lat,lng);marker.on('dragend',()=>update(marker.getLatLng()));map.on('click',(event:L.LeafletMouseEvent)=>update(event.latlng));setTimeout(()=>map.invalidateSize(),0)},[valid,latitude,longitude,onChange]);
+ useEffect(()=>{if(!valid||!mapRef.current||!markerRef.current)return;const next=L.latLng(position);markerRef.current.setLatLng(next);mapRef.current.panTo(next) },[valid,latitude,longitude]);
+ useEffect(()=>()=>{mapRef.current?.remove();mapRef.current=null;markerRef.current=null},[]);
+ return valid?<div ref={ref} className="location-picker-map" aria-label="Mapa para ajustar o ponto do endereço"/>:null;
+}
 export function RegistryForm({entity,initial={},ctx,onSaved,onClose}:{entity:string;initial?:Row;ctx:Ctx;onSaved:(r:Row)=>void;onClose:()=>void}){
  const[v,setV]=useState<Row>({...{active:true,level:'recepcao',whatsapp_opt_in:false},...initial,specialty_ids:initial.specialties?.map((s:Row)=>s.id)||[]}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[photoFile,setPhotoFile]=useState<File|null>(null);
  const[geo,setGeo]=useState(false),[geoError,setGeoError]=useState(''),[geoLabel,setGeoLabel]=useState('');
  const addressVersion=useRef(0);
  useEffect(()=>()=>{addressVersion.current++},[]);
+ const setLocation=useCallback((latitude:number,longitude:number)=>setV(p=>({...p,latitude,longitude})),[]);
  const update=(k:string,val:any)=>{
   if(entity==='clients'&&addressFields.includes(k)){addressVersion.current++;setGeoError('');setGeoLabel('');setV(p=>({...p,[k]:k==='state'?String(val).toUpperCase():val,latitude:null,longitude:null}));}
   else setV(p=>({...p,[k]:val}));
  };
  async function locate(){
   const version=addressVersion.current;setGeo(true);setGeoError('');setGeoLabel('');
-  try{const location=await api('/clients/geocode','POST',Object.fromEntries(addressFields.map(k=>[k,v[k]??''])));if(version!==addressVersion.current)return;setV(p=>({...p,latitude:location.latitude,longitude:location.longitude}));setGeoLabel(location.display_name);}
+  try{const location=await api('/clients/geocode','POST',Object.fromEntries(addressFields.map(k=>[k,v[k]??''])));if(version!==addressVersion.current)return;setLocation(location.latitude,location.longitude);setGeoLabel(location.display_name);}
   catch(e){if(version===addressVersion.current)setGeoError((e as Error).message)}finally{setGeo(false)}
  }
 
@@ -25,10 +38,11 @@ export function RegistryForm({entity,initial={},ctx,onSaved,onClose}:{entity:str
  {entity==='doctors'&&<fieldset className="checkbox-group"><legend>Especialidades do médico *</legend>{ctx.options.specialties?.map((s:Row)=><label key={s.id}><input type="checkbox" checked={v.specialty_ids.includes(s.id)} onChange={e=>update('specialty_ids',e.target.checked?[...v.specialty_ids,s.id]:v.specialty_ids.filter((id:number)=>id!==s.id))}/>{s.name}</label>)}</fieldset>}
  {entity==='clients'&&<><section className="location-fields" aria-label="Localização no mapa">
   <div className="geo-action"><MapPin size={18}/><span>Localização no mapa</span><button type="button" className="button secondary" disabled={geo||busy} onClick={locate}>{geo?'Gerando localização…':'Gerar localização pelo endereço'}</button></div>
-  <p className="muted">Preencha rua, número, bairro, cidade, UF e CEP e clique no botão. As coordenadas são preenchidas automaticamente e usadas nos relatórios por mapa.</p>
+  <p className="muted">Preencha rua, número, bairro, cidade, UF e CEP e gere a localização. Em seguida, arraste o marcador ou clique no ponto exato do mapa.</p>
   <div className="form-grid">{['latitude','longitude'].map(key=><Field key={key} label={key==='latitude'?'Latitude':'Longitude'}><input value={v[key]??''} readOnly placeholder="Preenchida pelo endereço"/></Field>)}</div>
-  <div role="status" aria-live="polite">{geoLabel?<p>Endereço encontrado: {geoLabel}. Salve o cadastro para manter esta localização.</p>:<p>{hasLocation(v)?'Localização registrada.':'Localização ainda não gerada. Você pode salvar o cadastro e localizar depois.'}</p>}</div>
-  {hasLocation(v)&&<p><a href={`https://www.openstreetmap.org/?mlat=${v.latitude}&mlon=${v.longitude}#map=18/${v.latitude}/${v.longitude}`} target="_blank" rel="noreferrer">Conferir ponto no mapa</a> · A posição pode ser aproximada.</p>}
+  <div role="status" aria-live="polite">{geoLabel?<p>Endereço encontrado: {geoLabel}. Ajuste o marcador se necessário e salve o cadastro para manter o ponto final.</p>:<p>{hasLocation(v)?'Arraste o marcador ou clique no mapa para ajustar o ponto final.':'Localização ainda não gerada. Você pode salvar o cadastro e localizar depois.'}</p>}</div>
+  <LocationPicker latitude={v.latitude} longitude={v.longitude} onChange={setLocation}/>
+  {hasLocation(v)&&<p>Arraste o marcador ou clique no mapa para definir o local exato. <a href={`https://www.openstreetmap.org/?mlat=${v.latitude}&mlon=${v.longitude}#map=18/${v.latitude}/${v.longitude}`} target="_blank" rel="noreferrer">Abrir em tela cheia</a>.</p>}
   <ErrorBox message={geoError}/><small>Dados de localização: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>.</small>
  </section><label className="check-label"><input type="checkbox" checked={!!v.whatsapp_opt_in} onChange={e=>update('whatsapp_opt_in',e.target.checked)}/>Cliente autorizou receber mensagens por WhatsApp</label><Field label="Foto do cliente" hint="JPG, PNG ou WebP, até 4 MB."><input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={e=>setPhotoFile(e.target.files?.[0]||null)}/></Field></>}
  {entity==='users'&&<label className="check-label"><input type="checkbox" checked={v.active} onChange={e=>update('active',e.target.checked)}/>Usuário ativo</label>}
