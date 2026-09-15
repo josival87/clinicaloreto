@@ -10,13 +10,15 @@ Route::prefix('api')->group(function() {
         Route::post('/logout',[AuthController::class,'logout']);
         Route::get('/options',[RegistryController::class,'options']);
         Route::get('/clients/lookup',[RegistryController::class,'lookup']);
+        Route::post('/clients/geocode',[RegistryController::class,'geocodeAddress']);
         Route::match(['get','post'],'/clients/{client}/photo',[RegistryController::class,'photo']);
-        Route::post('/clients/{client}/geocode',[RegistryController::class,'geocode'])->middleware('throttle:1,1');
+        Route::post('/clients/{client}/geocode',[RegistryController::class,'geocode']);
         Route::get('/dashboard',[ReportController::class,'dashboard']);
         Route::get('/reports/leaders',[ReportController::class,'leaders']);
         Route::get('/reports/clients',[ReportController::class,'clients']);
         Route::get('/reports/map',[ReportController::class,'map']);
         Route::get('/reports/appointments',[ReportController::class,'appointments']);
+        Route::get('/reports/appointments/summary',[ReportController::class,'appointmentSummary']);
         Route::get('/appointments',[AgendaController::class,'index']);
         Route::post('/appointments',[AgendaController::class,'save']);
         Route::put('/appointments/{id}',[AgendaController::class,'save'])->whereNumber('id');

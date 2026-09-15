@@ -1,6 +1,6 @@
 <?php
 namespace App\Http\Controllers;
-use App\Models\{Client,Appointment,Slot,Leader};
+use App\Models\{Client,Appointment,Slot,Leader,Specialty};
 use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB,Http};
@@ -45,6 +45,46 @@ class ReportController extends Controller {
         $this->access(); $r->validate(['neighborhood'=>'nullable|string|max:150']);
         $q=Client::query()->when($r->filled('neighborhood'),fn($q)=>$q->where('neighborhood',$r->input('neighborhood')));
         return ['unmapped'=>(clone $q)->whereNull('latitude')->count(),'points'=>$q->whereNotNull('latitude')->whereNotNull('longitude')->select('id','name','phone','latitude','longitude','street','number','neighborhood')->get()];
+    }
+    public function appointmentSummary(Request $r) {
+        $this->access();
+        $r->validate([
+            'mode'=>'nullable|in:month,year',
+            'month'=>'nullable|date_format:Y-m',
+            'year'=>'nullable|integer|between:1900,2100',
+            'status'=>'nullable|in:scheduled,confirmed,completed,cancelled',
+            'specialty_id'=>'nullable|integer|exists:specialties,id',
+        ]);
+        $mode=$r->input('mode','month');
+        $start=$mode==='year'
+            ? Carbon::create($r->integer('year',today()->year),1,1)->startOfDay()
+            : Carbon::createFromFormat('!Y-m',$r->input('month',today()->format('Y-m')));
+        $end=$mode==='year' ? $start->copy()->endOfYear() : $start->copy()->endOfMonth();
+        $months=$mode==='year' ? range(1,12) : [$start->month];
+
+        // Aggregate every matching appointment in PostgreSQL, independent of list pagination.
+        // The reporting date is the scheduled date, consistent with the individual report.
+        $counts=DB::table('appointments as a')->join('slots as s','s.id','=','a.slot_id')
+            ->whereBetween('s.date',[$start->toDateString(),$end->toDateString()])
+            ->when($r->filled('status'),fn($q)=>$q->where('a.status',$r->input('status')))
+            ->when($r->filled('specialty_id'),fn($q)=>$q->where('s.specialty_id',$r->integer('specialty_id')))
+            ->selectRaw('s.specialty_id, EXTRACT(MONTH FROM s.date)::integer as month, COUNT(*)::integer as count')
+            ->groupByRaw('s.specialty_id, EXTRACT(MONTH FROM s.date)')->get();
+        $bySpecialty=$counts->groupBy('specialty_id');
+        $rows=Specialty::query()->when($r->filled('specialty_id'),fn($q)=>$q->whereKey($r->integer('specialty_id')))
+            ->orderBy('name')->get(['id','name'])->map(function($specialty) use($bySpecialty,$months) {
+                $values=$bySpecialty->get($specialty->id,collect())->pluck('count','month');
+                $monthly=array_map(fn($month)=>(int)$values->get($month,0),$months);
+                return ['specialty_id'=>$specialty->id,'name'=>$specialty->name,'counts'=>$monthly,'total'=>array_sum($monthly)];
+            });
+        $monthlyTotals=array_map(fn($index)=>(int)$rows->sum(fn($row)=>$row['counts'][$index]),array_keys($months));
+        return [
+            'mode'=>$mode,'year'=>$start->year,'month'=>$start->format('Y-m'),
+            'from'=>$start->toDateString(),'to'=>$end->toDateString(),
+            'date_basis'=>'scheduled_date','status'=>$r->input('status') ?: 'all',
+            'months'=>$months,'rows'=>$rows,'monthly_totals'=>$monthlyTotals,
+            'total'=>array_sum($monthlyTotals),'active_specialties'=>$rows->where('total','>',0)->count(),
+        ];
     }
     public function appointments(Request $r) {
         $this->access(); [$from,$to]=$this->range($r); $r->validate(['status'=>'nullable|in:scheduled,confirmed,completed,cancelled','specialty_id'=>'nullable|integer|exists:specialties,id','page'=>'nullable|integer|min:1']);

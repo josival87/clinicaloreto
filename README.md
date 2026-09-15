@@ -58,7 +58,9 @@ O scheduler prepara mensagens às 07:00 em America/Sao_Paulo e processa a fila a
 
 ## Endereços e mapas
 
-A ficha permite informar latitude/longitude ou consultar o endereço no Nominatim. A consulta é explícita, limitada a uma por minuto por usuário e usa o User-Agent configurável `GEOCODE_USER_AGENT`. Confira resultados aproximados. Alterações de endereço invalidam coordenadas antigas. O mapa usa tiles públicos do OpenStreetMap; para grande volume, configure provedores adequados à carga. Fonte tipográfica externa: Google Fonts, com fallback local.
+O cadastro e a edição oferecem **Gerar localização pelo endereço**, sem digitar latitude/longitude. O botão consulta rua, número, bairro, cidade, UF e CEP; os campos de coordenadas são somente leitura e são persistidos ao salvar. A ficha salva também permite localizar o endereço. Alterar qualquer campo de endereço no formulário limpa o ponto anterior; uma resposta de consulta iniciada antes da alteração é descartada. Falhas de consulta não impedem salvar o cadastro sem localização.
+
+Usamos Nominatim/OpenStreetMap, gratuito e sem chave, para consultas pontuais. Conforme a [política do serviço público](https://operations.osmfoundation.org/policies/nominatim/), há bloqueio global de consultas simultâneas e intervalo mínimo de um segundo entre chamadas, limite de uma consulta externa por minuto por usuário, cache de sucesso por 30 dias e de endereço não encontrado por 10 minutos. Não há consultas enquanto se digita nem processamento em lote. O servidor envia apenas os campos de endereço, sem nome, CPF, telefone ou informações clínicas. O User-Agent é configurável em `GEOCODE_USER_AGENT` e o endpoint compatível com Nominatim em `GEOCODE_URL`, sem alterar código. A localização pode ser aproximada (rua); resultados apenas de cidade/bairro são recusados, e o formulário oferece link para conferir o ponto. A cobertura e disponibilidade do provedor público não são garantidas. O mapa usa tiles públicos do OpenStreetMap; para grande volume, configure provedores adequados à carga. Fonte tipográfica externa: Google Fonts, com fallback local.
 
 ## Testes
 

@@ -2,9 +2,10 @@
 namespace App\Http\Controllers;
 use App\Models\{Client,Doctor,Leader,Specialty,User};
 use App\Rules\Cpf;
+use App\Services\GeocodingService;
 use App\Support\Audit;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{DB,Storage,Http};
+use Illuminate\Support\Facades\{DB,Storage};
 use Illuminate\Validation\Rule;
 
 class RegistryController extends Controller {
@@ -67,7 +68,7 @@ class RegistryController extends Controller {
             if($entity==='clients' && array_key_exists('whatsapp_opt_in',$data)) $data['whatsapp_opt_in_at']=$data['whatsapp_opt_in'] ? ($row->whatsapp_opt_in_at ?: now()) : null;
             if($entity==='clients' && $id) {
                 $addressChanged=collect(['street','number','neighborhood','city','state','zip'])->contains(fn($key)=>array_key_exists($key,$data) && $data[$key]!==$row->$key);
-                if($addressChanged && (($data['latitude']??null)==$row->latitude) && (($data['longitude']??null)==$row->longitude)) { $data['latitude']=null; $data['longitude']=null; }
+                if($addressChanged && (!isset($data['latitude']) || !isset($data['longitude']))) { $data['latitude']=null; $data['longitude']=null; }
             }
             $specialties=$data['specialty_ids']??[]; unset($data['specialty_ids']);
             if($entity==='doctors' && $id) {
@@ -102,12 +103,17 @@ class RegistryController extends Controller {
         $old=$client->photo_path; $path=$r->file('photo')->store('client-photos','local');
         $client->update(['photo_path'=>$path]); if($old) Storage::disk('local')->delete($old); Audit::record('photo','clients',$client->id); return $client;
     }
-    public function geocode(Client $client) {
-        abort_unless($client->street && $client->city && $client->state,422,'Preencha rua, cidade e estado antes de localizar o endereço.');
-        $query=implode(', ',array_filter([$client->street.' '.$client->number,$client->neighborhood,$client->city,$client->state,'Brasil']));
-        $response=Http::withHeaders(['User-Agent'=>config('clinic.geocode_agent')])->timeout(10)->get('https://nominatim.openstreetmap.org/search',['q'=>$query,'format'=>'jsonv2','limit'=>1,'countrycodes'=>'br']);
-        abort_unless($response->successful(),502,'O serviço de mapas está indisponível. Tente novamente.');
-        $hit=$response->json()[0]??null; abort_unless($hit,422,'Endereço não encontrado. Revise os dados ou informe as coordenadas.');
-        $client->update(['latitude'=>$hit['lat'],'longitude'=>$hit['lon']]); Audit::record('geocode','clients',$client->id); return $client;
+    public function geocodeAddress(Request $r, GeocodingService $geocoder) {
+        return $geocoder->locate($r->only(['street','number','neighborhood','city','state','zip']));
+    }
+    public function geocode(Client $client, GeocodingService $geocoder) {
+        $address=$client->only(['street','number','neighborhood','city','state','zip']);
+        $location=$geocoder->locate($address);
+        return DB::transaction(function() use($client,$address,$location) {
+            $current=Client::lockForUpdate()->findOrFail($client->id);
+            abort_if($current->only(array_keys($address))!==$address,409,'O endereço foi alterado durante a consulta. Atualize a ficha e tente novamente.');
+            $current->update(['latitude'=>$location['latitude'],'longitude'=>$location['longitude']]);
+            Audit::record('geocode','clients',$current->id); return $current;
+        });
     }
 }
