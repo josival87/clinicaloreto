@@ -52,7 +52,7 @@ class ReportController extends Controller {
             'mode'=>'nullable|in:month,year',
             'month'=>'nullable|date_format:Y-m',
             'year'=>'nullable|integer|between:1900,2100',
-            'status'=>'nullable|in:scheduled,confirmed,completed,cancelled',
+            'status'=>'nullable|in:scheduled,confirmed,completed,cancelled,no_show',
             'specialty_id'=>'nullable|integer|exists:specialties,id',
         ]);
         $mode=$r->input('mode','month');
@@ -87,7 +87,7 @@ class ReportController extends Controller {
         ];
     }
     public function appointments(Request $r) {
-        $this->access(); [$from,$to]=$this->range($r); $r->validate(['status'=>'nullable|in:scheduled,confirmed,completed,cancelled','specialty_id'=>'nullable|integer|exists:specialties,id','page'=>'nullable|integer|min:1']);
+        $this->access(); [$from,$to]=$this->range($r); $r->validate(['status'=>'nullable|in:scheduled,confirmed,completed,cancelled,no_show','specialty_id'=>'nullable|integer|exists:specialties,id','page'=>'nullable|integer|min:1']);
         $q=Appointment::with('client','slot.doctor','slot.specialty')->whereHas('slot',fn($q)=>$q->whereBetween('date',[$from,$to])->when($r->filled('specialty_id'),fn($q)=>$q->where('specialty_id',$r->integer('specialty_id'))));
         if($r->filled('status')) $q->where('status',$r->input('status'));
         return $q->latest()->paginate(50);

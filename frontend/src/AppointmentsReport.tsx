@@ -4,7 +4,7 @@ import {type Ctx,type Row,useApi,query,monthNow,number,Loading,ErrorBox,Empty} f
 import './appointments-report.css';
 
 const months=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-const statuses:Record<string,string>={'':'Todas as situações (inclui canceladas)',scheduled:'Agendadas',confirmed:'Confirmadas',completed:'Finalizadas',cancelled:'Canceladas'};
+const statuses:Record<string,string>={'':'Todas as situações (inclui canceladas)',scheduled:'Agendadas',confirmed:'Confirmadas',completed:'Finalizadas',cancelled:'Canceladas',no_show:'Não compareceu'};
 type SummaryRow={specialty_id:number;name:string;counts:number[];total:number};
 type Summary={mode:'month'|'year';year:number;month:string;months:number[];rows:SummaryRow[];monthly_totals:number[];total:number;active_specialties:number;status:string};
 

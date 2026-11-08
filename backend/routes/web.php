@@ -10,6 +10,7 @@ Route::prefix('api')->group(function() {
         Route::post('/logout',[AuthController::class,'logout']);
         Route::get('/options',[RegistryController::class,'options']);
         Route::get('/clients/lookup',[RegistryController::class,'lookup']);
+        Route::get('/address/zip/{zip}',[RegistryController::class,'postalCode'])->where('zip','[0-9.-]+')->middleware('throttle:30,1');
         Route::post('/clients/geocode',[RegistryController::class,'geocodeAddress']);
         Route::match(['get','post'],'/clients/{client}/photo',[RegistryController::class,'photo']);
         Route::post('/clients/{client}/geocode',[RegistryController::class,'geocode']);
@@ -20,11 +21,14 @@ Route::prefix('api')->group(function() {
         Route::get('/reports/appointments',[ReportController::class,'appointments']);
         Route::get('/reports/appointments/summary',[ReportController::class,'appointmentSummary']);
         Route::get('/appointments',[AgendaController::class,'index']);
+        Route::get('/consultations',[AgendaController::class,'consultations']);
+        Route::post('/consultations',[AgendaController::class,'historical']);
         Route::post('/appointments',[AgendaController::class,'save']);
         Route::put('/appointments/{id}',[AgendaController::class,'save'])->whereNumber('id');
         Route::patch('/appointments/{id}/status',[AgendaController::class,'transition'])->whereNumber('id');
         Route::get('/slots',[AgendaController::class,'slots']);
         Route::post('/slots',[AgendaController::class,'createSlots']);
+        Route::post('/slots/reschedule-day',[AgendaController::class,'bulkReschedule']);
         Route::put('/slots/{id}',[AgendaController::class,'updateSlot'])->whereNumber('id');
         Route::post('/slots/{id}/cancel',[AgendaController::class,'cancelSlot'])->whereNumber('id');
         Route::delete('/slots/{id}',[AgendaController::class,'deleteSlot'])->whereNumber('id');

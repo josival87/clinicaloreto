@@ -98,7 +98,7 @@ class ClinicTest extends TestCase {
     }
     public function test_repetition_skips_invalid_dates_and_does_not_overwrite_existing_capacity(): void {
         $year=today()->year+1;
-        $data=['doctor_id'=>$this->doctor->id,'specialty_id'=>$this->specialty->id,'capacity'=>7,'dates'=>[$year.'-01-31'],'repeat_months'=>[$year.'-02',$year.'-03']];
+        $data=['doctor_id'=>$this->doctor->id,'specialty_id'=>$this->specialty->id,'capacity'=>7,'shift'=>'morning','description'=>'Consultas gerais','dates'=>[$year.'-01-31'],'repeat_months'=>[$year.'-02',$year.'-03']];
         $this->postJson('/api/slots',$data)->assertOk()->assertJsonPath('created',2)->assertJsonPath('skipped.0',$year.'-02-31');
         $data['capacity']=99;$this->postJson('/api/slots',$data)->assertOk()->assertJsonPath('existing',2);
         $this->assertSame(7,Slot::first()->capacity);
@@ -124,6 +124,32 @@ class ClinicTest extends TestCase {
         $this->postJson('/api/appointments',['client_id'=>$this->otherClient()->id,'slot_id'=>$first->id])->assertCreated();
         $this->patchJson('/api/appointments/'.$a->id.'/status',['status'=>'cancelled'])->assertOk();
         $this->postJson('/api/appointments',['client_id'=>$this->client->id,'slot_id'=>$next->id])->assertCreated();
+    }
+    public function test_no_show_shifted_slots_and_historical_consultation(): void {
+        $morning=$this->slot(today()->toDateString());
+        $afternoon=Slot::create(['doctor_id'=>$this->doctor->id,'specialty_id'=>$this->specialty->id,'date'=>today(),'shift'=>'afternoon','description'=>'Retornos','capacity'=>2]);
+        $appointment=Appointment::create(['client_id'=>$this->client->id,'slot_id'=>$morning->id]);
+        $this->patchJson('/api/appointments/'.$appointment->id.'/status',['status'=>'no_show'])->assertOk()->assertJsonPath('status','no_show');
+        $this->postJson('/api/consultations',['client_id'=>$this->otherClient()->id,'doctor_id'=>$this->doctor->id,'specialty_id'=>$this->specialty->id,'date'=>today()->subDay()->toDateString(),'shift'=>'afternoon','status'=>'completed','description'=>'Consulta lançada depois'])
+            ->assertCreated()->assertJsonPath('slot.shift','afternoon')->assertJsonPath('status','completed');
+        $this->getJson('/api/consultations?month='.today()->format('Y-m').'&status=no_show')->assertOk()->assertJsonPath('data.0.id',$appointment->id);
+        $this->assertSame('afternoon',$afternoon->shift);
+    }
+    public function test_bulk_day_move_and_weekday_slot_creation(): void {
+        $origin=$this->slot(today()->addDay()->toDateString(),2);
+        $a=Appointment::create(['client_id'=>$this->client->id,'slot_id'=>$origin->id]);
+        $target=today()->addDays(7)->toDateString();
+        $this->postJson('/api/slots/reschedule-day',['source_date'=>$origin->date->toDateString(),'target_date'=>$target])->assertOk()->assertJsonPath('count',1);
+        $this->assertSame($target,$a->fresh()->slot->date->toDateString());
+        $this->assertSame('cancelled',$origin->fresh()->status);
+        $month=today()->addMonth()->format('Y-m');
+        $this->postJson('/api/slots',['doctor_id'=>$this->doctor->id,'specialty_id'=>$this->specialty->id,'capacity'=>3,'shift'=>'afternoon','description'=>'Todas as segundas','weekdays'=>[1],'recurrence_start_month'=>$month,'recurrence_end_month'=>$month])
+            ->assertOk()->assertJsonPath('existing',0);
+        $this->assertTrue(Slot::where('description','Todas as segundas')->get()->every(fn($slot)=>$slot->date->isoWeekday()===1));
+    }
+    public function test_postal_code_lookup_fills_address(): void {
+        Http::fake(['viacep.com.br/*'=>Http::response(['cep'=>'01310-200','logradouro'=>'Avenida Paulista','bairro'=>'Bela Vista','localidade'=>'São Paulo','uf'=>'SP'])]);
+        $this->getJson('/api/address/zip/01310200')->assertOk()->assertJson(['zip'=>'01310200','street'=>'Avenida Paulista','neighborhood'=>'Bela Vista','city'=>'São Paulo','state'=>'SP']);
     }
     public function test_whatsapp_consent_dedup_encryption_and_no_blind_retry(): void {
         $service=app(WhatsappService::class);$service->store(['enabled'=>true,'phone_number_id'=>'1234567890','access_token'=>'secret-token','app_secret'=>'secret-app','verify_token'=>'verify-token-value']);

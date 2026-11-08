@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 use App\Models\{Client,Doctor,Leader,Specialty,User};
 use App\Rules\Cpf;
 use App\Services\GeocodingService;
+use App\Services\PostalCodeService;
 use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB,Storage};
@@ -36,6 +37,7 @@ class RegistryController extends Controller {
         validator(['cpf'=>$cpf],['cpf'=>['required',new Cpf]])->validate();
         return ['client'=>Client::with('leader')->where('cpf',$cpf)->first()];
     }
+    public function postalCode(string $zip, PostalCodeService $service) { return $service->lookup($zip); }
     public function options() {
         return ['doctors'=>Doctor::with('specialties')->orderBy('name')->get(),'specialties'=>Specialty::orderBy('name')->get(),'leaders'=>Leader::orderBy('name')->get()];
     }

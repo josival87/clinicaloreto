@@ -12,8 +12,8 @@ class MenuSeedTest extends TestCase {
         $this->seed([MenuSeeder::class,AdminSeeder::class]);
         User::first()->update(['password'=>'Changed-password-456']);
         $this->seed([MenuSeeder::class,AdminSeeder::class]);
-        $this->assertSame(12,DB::table('menus')->count());$this->assertDatabaseCount('users',1);
+        $this->assertSame(13,DB::table('menus')->count());$this->assertDatabaseCount('users',1);
         $this->assertTrue(\Illuminate\Support\Facades\Hash::check('Changed-password-456',User::first()->password));
-        $this->actingAs(User::first())->getJson('/api/session')->assertOk()->assertJsonCount(12,'menus');
+        $this->actingAs(User::first())->getJson('/api/session')->assertOk()->assertJsonCount(13,'menus');
     }
 }
