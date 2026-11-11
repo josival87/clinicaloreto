@@ -103,6 +103,15 @@ class ClinicTest extends TestCase {
         $data['capacity']=99;$this->postJson('/api/slots',$data)->assertOk()->assertJsonPath('existing',2);
         $this->assertSame(7,Slot::first()->capacity);
     }
+    public function test_slots_can_be_created_and_updated_without_description(): void {
+        $date=today()->addDay()->toDateString();
+        $this->postJson('/api/slots',['doctor_id'=>$this->doctor->id,'specialty_id'=>$this->specialty->id,'capacity'=>4,'shift'=>'morning','dates'=>[$date]])
+            ->assertOk()->assertJsonPath('created',1);
+        $slot=Slot::whereDate('date',$date)->firstOrFail();
+        $this->assertNull($slot->description);
+        $this->putJson('/api/slots/'.$slot->id,['capacity'=>5,'description'=>'','status'=>'available'])->assertOk();
+        $this->assertNull($slot->fresh()->description);
+    }
     public function test_role_enforcement_and_self_protection(): void {
         $this->deleteJson('/api/users/'.$this->admin->id)->assertUnprocessable();
         $reception=User::create(['name'=>'Recepção','cpf'=>'11144477735','email'=>'reception@loreto.local','password'=>'another-safe-password','level'=>'recepcao','active'=>true]);$this->actingAs($reception);

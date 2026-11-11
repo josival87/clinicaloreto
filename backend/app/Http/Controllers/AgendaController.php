@@ -69,7 +69,7 @@ class AgendaController extends Controller {
     public function createSlots(Request $r) {
         $this->manage();
         $data=$r->validate(['doctor_id'=>'required|integer|exists:doctors,id','specialty_id'=>'required|integer|exists:specialties,id','capacity'=>'required|integer|min:1|max:1000',
-            'shift'=>'required|in:morning,afternoon','description'=>'required|string|max:200',
+            'shift'=>'required|in:morning,afternoon','description'=>'nullable|string|max:200',
             'dates'=>'nullable|array|max:31','dates.*'=>'required|date_format:Y-m-d|after_or_equal:today|distinct','repeat_months'=>'nullable|array|max:24','repeat_months.*'=>'date_format:Y-m|distinct',
             'weekdays'=>'nullable|array|max:7','weekdays.*'=>'integer|between:1,7|distinct','recurrence_start_month'=>'nullable|required_with:weekdays|date_format:Y-m','recurrence_end_month'=>'nullable|required_with:weekdays|date_format:Y-m|after_or_equal:recurrence_start_month']);
         abort_if(empty($data['dates']) && empty($data['weekdays']),422,'Selecione ao menos uma data ou dia da semana.');
@@ -88,14 +88,14 @@ class AgendaController extends Controller {
         return DB::transaction(function() use($data,$dates,$skipped) {
             $created=0; $existing=0;
             foreach(array_unique($dates) as $date) {
-                $slot=Slot::firstOrCreate(['doctor_id'=>$data['doctor_id'],'specialty_id'=>$data['specialty_id'],'date'=>$date,'shift'=>$data['shift']],['capacity'=>$data['capacity'],'description'=>$data['description']]);
+                $slot=Slot::firstOrCreate(['doctor_id'=>$data['doctor_id'],'specialty_id'=>$data['specialty_id'],'date'=>$date,'shift'=>$data['shift']],['capacity'=>$data['capacity'],'description'=>$data['description']??null]);
                 if($slot->wasRecentlyCreated) { $created++; Audit::record('create','slots',$slot->id); } else $existing++;
             }
             return ['created'=>$created,'existing'=>$existing,'skipped'=>$skipped];
         });
     }
     public function updateSlot(Request $r,int $id) {
-        $this->manage(); $data=$r->validate(['capacity'=>'required|integer|min:1|max:1000','description'=>'required|string|max:200','status'=>'required|in:available,cancelled']);
+        $this->manage(); $data=$r->validate(['capacity'=>'required|integer|min:1|max:1000','description'=>'nullable|string|max:200','status'=>'required|in:available,cancelled']);
         abort_if($data['status']==='cancelled',422,'Use o cancelamento com realocação para tornar uma data indisponível.');
         return DB::transaction(function() use($id,$data) {
             $slot=Slot::lockForUpdate()->findOrFail($id); abort_if($slot->date->lt(today()),422,'Não é possível editar vagas passadas.');
